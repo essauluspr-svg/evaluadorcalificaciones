@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluador de Calificaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: barra superior con grupo y guardado, resumen en fichas, y tres vistas (calificaciones, alumnos, criterios). */
+:root{
+  --bg:#eef2f1; --surface:#ffffff; --surface-2:#f5f8f7; --line:#d5dedb; --ink:#14231f; --muted:#5b6b66;
+  --accent:#1f6f5c; --accent-ink:#ffffff; --accent-soft:#dcefe9;
+  --good:#1d7a46; --good-soft:#dff3e6; --bad:#b3362b; --bad-soft:#fbe4e1; --warn:#8a5a00; --warn-soft:#fdf0d0;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#101816; --surface:#18221f; --surface-2:#1f2b28; --line:#31403c; --ink:#e7efec; --muted:#9aaaa5;
+    --accent:#58c2a6; --accent-ink:#06211a; --accent-soft:#1d3a33;
+    --good:#6fd598; --good-soft:#17382a; --bad:#ff8f84; --bad-soft:#43201d; --warn:#f0c15a; --warn-soft:#3d3115;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101816; --surface:#18221f; --surface-2:#1f2b28; --line:#31403c; --ink:#e7efec; --muted:#9aaaa5;
+  --accent:#58c2a6; --accent-ink:#06211a; --accent-soft:#1d3a33;
+  --good:#6fd598; --good-soft:#17382a; --bad:#ff8f84; --bad-soft:#43201d; --warn:#f0c15a; --warn-soft:#3d3115;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-size:26px;line-height:1.1;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-size:18px;margin:0;text-wrap:balance}
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.top .left{display:flex;flex-direction:column;gap:2px}
+.sub{color:var(--muted);font-size:13px}
+.groupbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,input,textarea,button{font:inherit;color:inherit}
+select,input[type=text],input[type=number],textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+textarea{width:100%;min-height:150px;resize:vertical}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;font-weight:500}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.ghost{background:transparent}
+button.danger{color:var(--bad)}
+button.icon{padding:4px 9px;line-height:1.2}
+.sync{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.sync.ok i{background:var(--good)} .sync.busy i{background:var(--warn)} .sync.err i{background:var(--bad)}
+.banner{background:var(--warn-soft);color:var(--warn);border-radius:var(--r);padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;font-size:14px}
+.banner button{color:var(--ink)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.tile b{font-family:var(--display);font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.tile.main{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tile.main span{color:inherit;opacity:.85}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;padding:9px 14px;color:var(--muted);font-weight:600}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row.between{justify-content:space-between}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table.grid{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums;font-size:14px}
+.grid th,.grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:5px 8px;text-align:center;white-space:nowrap}
+.grid thead th{background:var(--surface-2);font-weight:600;font-size:13px}
+.grid thead tr:first-child th.crit{background:var(--accent-soft)}
+.grid th small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.grid td.name,.grid th.name{text-align:left;position:sticky;left:0;background:var(--surface);z-index:1;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.grid thead th.name{background:var(--surface-2)}
+.grid td.num{color:var(--muted);width:36px}
+.grid td.sub{background:var(--surface-2);font-weight:500}
+.grid td.final{font-weight:700;font-size:15px}
+.grid tfoot td{background:var(--surface-2);font-weight:600;border-bottom:0}
+.grid tfoot td.name{background:var(--surface-2)}
+.grid input.g{width:58px;text-align:center;padding:5px 4px;border-radius:6px}
+.grid input.g.bad{border-color:var(--bad);background:var(--bad-soft)}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+.pill.ok{background:var(--good-soft);color:var(--good)}
+.pill.no{background:var(--bad-soft);color:var(--bad)}
+.pill.na{background:var(--surface-2);color:var(--muted)}
+.fail{color:var(--bad)}
+.note{font-size:13px;color:var(--muted)}
+.warnbox{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 12px;font-size:13px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.list{display:flex;flex-direction:column;gap:6px}
+.item{display:flex;gap:8px;align-items:center}
+.item .n{width:28px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
+.item input[type=text]{flex:1}
+.crit{border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--surface-2)}
+.crit .head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.crit .head input[type=text]{flex:1;min-width:140px;font-weight:600}
+.w{display:flex;align-items:center;gap:4px}
+.w input{width:72px;text-align:right}
+.acts{display:flex;flex-direction:column;gap:6px;padding-left:12px;border-left:3px solid var(--accent-soft)}
+.acts .item input[type=number]{width:80px;text-align:right}
+.bar{height:10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.bar.off i{background:var(--bad)}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.settings label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.settings label input,.settings label select{color:var(--ink)}
+dialog{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);padding:18px;max-width:380px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog p{margin:0 0 14px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="left">
+      <h1>Evaluador de Calificaciones</h1>
+      <div class="sync" id="sync"><i></i><span id="syncText">Cargando…</span></div>
+    </div>
+    <div class="groupbar">
+      <label class="sub" for="grupoSel">Grupo</label>
+      <select id="grupoSel"></select>
+      <button id="btnNuevoGrupo" type="button">+ Nuevo grupo</button>
+    </div>
+  </header>
+
+  <div class="banner" id="bannerEjemplo" hidden>
+    <span>Estás viendo un grupo de ejemplo con alumnos inventados. Cámbialo a tu gusto o empieza uno vacío.</span>
+    <button id="btnEmpezar" type="button">Empezar con mi grupo</button>
+  </div>
+
+  <section class="tiles" id="tiles" aria-label="Resumen del grupo"></section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="notas" id="tab-notas" type="button">Calificaciones</button>
+    <button role="tab" data-tab="alumnos" id="tab-alumnos" type="button">Alumnos</button>
+    <button role="tab" data-tab="criterios" id="tab-criterios" type="button">Criterios y ajustes</button>
+  </nav>
+
+  <main id="view"></main>
+</div>
+
+<dialog id="dlg">
+  <p id="dlgMsg"></p>
+  <div class="row" style="justify-content:flex-end">
+    <button id="dlgNo" type="button">Cancelar</button>
+    <button id="dlgSi" type="button" class="primary">Sí, eliminar</button>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+var LS_KEY="evaluador-calificaciones-v1";
+var uid=function(){return Math.random().toString(36).slice(2,9)};
+var $=function(id){return document.getElementById(id)};
+var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})};
+
+/* ---------- Datos ---------- */
+function criteriosBase(){
+  return [
+    {id:uid(),nombre:"Examen",peso:40,acts:[{id:uid(),nombre:"Examen",max:10}]},
+    {id:uid(),nombre:"Tareas",peso:30,acts:[{id:uid(),nombre:"Tarea 1",max:10}]},
+    {id:uid(),nombre:"Participación",peso:20,acts:[{id:uid(),nombre:"Participación",max:10}]},
+    {id:uid(),nombre:"Proyecto",peso:10,acts:[{id:uid(),nombre:"Proyecto",max:10}]}
+  ];
+}
+function grupoNuevo(nombre){
+  return {id:uid(),nombre:nombre||"Grupo nuevo",escala:10,minima:6,decimales:1,vaciasCero:true,alumnos:[],criterios:criteriosBase(),notas:{}};
+}
+function grupoEjemplo(){
+  var g={id:uid(),nombre:"Ejemplo · 3.º A Matemáticas",ejemplo:true,escala:10,minima:6,decimales:1,vaciasCero:true,alumnos:[],notas:{},
+    criterios:[
+      {id:uid(),nombre:"Examen",peso:40,acts:[{id:uid(),nombre:"Parcial",max:100}]},
+      {id:uid(),nombre:"Tareas",peso:30,acts:[{id:uid(),nombre:"Tarea 1",max:10},{id:uid(),nombre:"Tarea 2",max:10},{id:uid(),nombre:"Tarea 3",max:10}]},
+      {id:uid(),nombre:"Participación",peso:20,acts:[{id:uid(),nombre:"Participación",max:10}]},
+      {id:uid(),nombre:"Proyecto",peso:10,acts:[{id:uid(),nombre:"Proyecto final",max:20}]}
+    ]};
+  var filas=[
+    ["Aguilar Méndez Sofía",[92,10,9,10,10,19]],
+    ["Bautista Cruz Diego",[58,7,6,0,8,12]],
+    ["Cortés Lara Valeria",[81,9,8,9,9,17]],
+    ["Domínguez Ríos Mateo",[45,5,6,4,6,10]],
+    ["Estrada Luna Camila",[74,8,10,7,10,16]],
+    ["Flores Vega Emiliano",[66,6,7,8,7,14]],
+    ["García Solís Renata",[88,10,10,9,9,20]],
+    ["Hernández Paz Iker",[39,4,0,5,5,8]]
+  ];
+  var acts=[];g.criterios.forEach(function(c){c.acts.forEach(function(a){acts.push(a)})});
+  filas.forEach(function(f){
+    var s={id:uid(),nombre:f[0]};g.alumnos.push(s);g.notas[s.id]={};
+    f[1].forEach(function(v,i){g.notas[s.id][acts[i].id]=v});
+  });
+  return g;
+}
+var state=null, dirty=false, tab="notas";
+function cargarLocal(){
+  try{var raw=localStorage.getItem(LS_KEY);if(raw){var s=JSON.parse(raw);if(s&&s.grupos&&s.grupos.length)return s}}catch(e){}
+  return null;
+}
+function guardarLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){}}
+state=cargarLocal();
+if(!state){var ge=grupoEjemplo();state={v:1,t:0,activo:ge.id,grupos:[ge]}}
+function G(){
+  var g=state.grupos.filter(function(x){return x.id===state.activo})[0];
+  if(!g){g=state.grupos[0];state.activo=g.id}
+  return g;
+}
+
+/* ---------- Cálculo ---------- */
+function num(v){return typeof v==="number"&&isFinite(v)}
+function redondear(n,d){var p=Math.pow(10,d);return Math.round((n+1e-9)*p)/p}
+function fmt(n,g){return n==null?"—":redondear(n,g.decimales).toFixed(g.decimales)}
+// Fracción (0 a 1) que el alumno obtuvo en un criterio: puntos obtenidos / puntos posibles.
+function fracCriterio(g,sid,c){
+  var n=g.notas[sid]||{},sum=0,max=0;
+  c.acts.forEach(function(a){
+    var v=n[a.id],m=Number(a.max)||0;
+    if(num(v)){sum+=v;max+=m}
+    else if(g.vaciasCero){max+=m}
+  });
+  return max>0?sum/max:null;
+}
+// Calificación final: suma de (fracción del criterio × su porcentaje), llevada a la escala.
+function calcular(g){
+  var res={al:{},promFinal:null,ok:0,no:0,sin:0,alta:null,baja:null,act:{},crit:{}};
+  var finales=[];
+  g.alumnos.forEach(function(s){
+    var r={crit:{},final:null},wsum=0,acc=0;
+    g.criterios.forEach(function(c){
+      var f=fracCriterio(g,s.id,c),w=Number(c.peso)||0;
+      r.crit[c.id]=f==null?null:f*g.escala;
+      if(f!=null){acc+=f*w;wsum+=w}
+    });
+    if(wsum>0){
+      r.final=redondear(acc/wsum*g.escala,g.decimales);
+      finales.push(r.final);
+      if(r.final>=g.minima)res.ok++;else res.no++;
+    }else res.sin++;
+    res.al[s.id]=r;
+  });
+  if(finales.length){
+    res.promFinal=finales.reduce(function(a,b){return a+b},0)/finales.length;
+    res.alta=Math.max.apply(null,finales);res.baja=Math.min.apply(null,finales);
+  }
+  g.criterios.forEach(function(c){
+    var vals=g.alumnos.map(function(s){return res.al[s.id].crit[c.id]}).filter(function(v){return v!=null});
+    res.crit[c.id]=vals.length?vals.reduce(function(a,b){return a+b},0)/vals.length:null;
+    c.acts.forEach(function(a){
+      var vs=g.alumnos.map(function(s){return (g.notas[s.id]||{})[a.id]}).filter(num);
+      res.act[a.id]=vs.length?vs.reduce(function(x,y){return x+y},0)/vs.length:null;
+    });
+  });
+  return res;
+}
+function pesoTotal(g){return g.criterios.reduce(function(a,c){return a+(Number(c.peso)||0)},0)}
+
+/* ---------- Guardado ---------- */
+var ref=null, guardando=false, pendiente=false, timer=null, descargas=null;
+function setSync(cls,txt){$("sync").className="sync "+cls;$("syncText").textContent=txt}
+function cambio(){
+  dirty=true;state.t=Date.now();
+  var g=G();if(g.ejemplo){/* se conserva la marca hasta que el usuario empiece su grupo */}
+  guardarLocal();
+  if(ref){setSync("busy","Guardando…");clearTimeout(timer);timer=setTimeout(subir,900)}
+  else setSync("","Guardado en este navegador");
+}
+function subir(){
+  if(!ref)return;
+  if(guardando){pendiente=true;return}
+  guardando=true;
+  ref.set({json:JSON.stringify(state),t:state.t}).then(function(){
+    setSync("ok","Guardado en tu cuenta");
+  }).catch(function(){
+    setSync("err","No se pudo guardar en tu cuenta. Tus cambios siguen en este navegador.");
+  }).then(function(){
+    guardando=false;if(pendiente){pendiente=false;subir()}
+  });
+}
+function conTiempo(p,ms){return new Promise(function(res,rej){var t=setTimeout(function(){rej(new Error("tiempo"))},ms);p.then(function(v){clearTimeout(t);res(v)},function(e){clearTimeout(t);rej(e)})})}
+function iniciarNube(intento){
+  var c=window.claude;
+  if(!c||typeof c.use!=="function"){
+    if((intento||0)<10){setTimeout(function(){iniciarNube((intento||0)+1)},500)}
+    else setSync("","Guardado en este navegador");
+    return;
+  }
+  c.use("downloads").then(function(d){if(d){descargas=d;var b=$("btnCsv");if(b)b.hidden=false}}).catch(function(){});
+  Promise.all([c.use("db"),c.use("user")]).then(function(r){
+    var db=r[0],user=r[1];
+    if(!db||!user){setSync("","Guardado en este navegador");return}
+    return Promise.resolve(user.id()).then(function(id){
+      if(!id){setSync("","Guardado en este navegador");return}
+      var doc=db.collection("data/users/"+id).doc("evaluador");
+      return conTiempo(doc.get(),10000).then(function(snap){
+        var d=snap&&typeof snap.data==="function"?snap.data():snap;
+        if(snap&&snap.exists===false)d=null;
+        var remoto=null;
+        try{if(d&&d.json)remoto=JSON.parse(d.json)}catch(e){}
+        ref=doc;
+        if(remoto&&remoto.grupos&&remoto.grupos.length&&(!dirty)&&((remoto.t||0)>=(state.t||0))){
+          state=remoto;guardarLocal();renderTodo();setSync("ok","Guardado en tu cuenta");
+        }else if(dirty||(state.t||0)>0){subir()}
+        else setSync("ok","Listo. Tus cambios se guardan en tu cuenta");
+      });
+    });
+  }).catch(function(){setSync("","Guardado en este navegador")});
+}
+
+/* ---------- Render ---------- */
+function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove("on")},2200)}
+function confirmar(msg,si){
+  var d=$("dlg");$("dlgMsg").textContent=msg;
+  $("dlgSi").onclick=function(){d.close();si()};
+  $("dlgNo").onclick=function(){d.close()};
+  if(d.showModal)d.showModal();else si();
+}
+function renderCabecera(){
+  var sel=$("grupoSel");
+  sel.innerHTML=state.grupos.map(function(g){return '<option value="'+g.id+'"'+(g.id===state.activo?" selected":"")+'>'+esc(g.nombre)+'</option>'}).join("");
+  $("bannerEjemplo").hidden=!G().ejemplo;
+  ["notas","alumnos","criterios"].forEach(function(t){$("tab-"+t).setAttribute("aria-selected",t===tab?"true":"false")});
+}
+function renderFichas(r){
+  var g=G();r=r||calcular(g);
+  var tot=g.alumnos.length;
+  $("tiles").innerHTML=
+    '<div class="tile main"><b>'+fmt(r.promFinal,g)+'</b><span>Promedio del grupo (sobre '+g.escala+')</span></div>'+
+    '<div class="tile"><b>'+tot+'</b><span>Alumnos</span></div>'+
+    '<div class="tile"><b>'+r.ok+'</b><span>Aprobados (mínima '+g.minima+')</span></div>'+
+    '<div class="tile"><b class="'+(r.no?"fail":"")+'">'+r.no+'</b><span>Reprobados</span></div>'+
+    '<div class="tile"><b>'+fmt(r.alta,g)+' / '+fmt(r.baja,g)+'</b><span>Más alta / más baja</span></div>';
+}
+function pill(final,g){
+  if(final==null)return '<span class="pill na">Sin calificar</span>';
+  return final>=g.minima?'<span class="pill ok">✓ Aprobado</span>':'<span class="pill no">✕ Reprobado</span>';
+}
+function renderNotas(){
+  var g=G(),r=calcular(g),h="";
+  var pt=pesoTotal(g);
+  h+='<div class="row between"><div class="note">Escribe la calificación de cada actividad. Enter o ↓ baja al siguiente alumno. Puedes pegar una columna copiada de Excel.</div>'+
+     '<div class="row"><button type="button" id="btnCopiar">Copiar tabla</button><button type="button" id="btnCsv"'+(descargas?"":" hidden")+'>Descargar CSV</button></div></div>';
+  if(Math.abs(pt-100)>0.001)h+='<div class="warnbox">Los porcentajes de los criterios suman '+pt+'%, no 100%. Mientras tanto la calificación se calcula de forma proporcional. Ajústalos en “Criterios y ajustes”.</div>';
+  if(!g.alumnos.length){h+='<div class="panel"><div>Este grupo todavía no tiene alumnos.</div><div><button type="button" class="primary" data-go="alumnos">Agregar alumnos</button></div></div>';$("view").innerHTML='<div style="display:flex;flex-direction:column;gap:12px">'+h+'</div>';return}
+  if(!g.criterios.length){h+='<div class="panel"><div>Este grupo todavía no tiene criterios de evaluación.</div><div><button type="button" class="primary" data-go="criterios">Agregar criterios</button></div></div>';$("view").innerHTML='<div style="display:flex;flex-direction:column;gap:12px">'+h+'</div>';return}
+  h+='<div class="tablebox"><table class="grid"><thead><tr><th rowspan="2">#</th><th rowspan="2" class="name">Alumno</th>';
+  g.criterios.forEach(function(c){
+    h+='<th class="crit" colspan="'+(c.acts.length+1)+'">'+esc(c.nombre)+' · '+(Number(c.peso)||0)+'% <button type="button" class="icon ghost" title="Agregar actividad a '+esc(c.nombre)+'" data-addact="'+c.id+'">+</button></th>';
+  });
+  h+='<th rowspan="2">Final</th><th rowspan="2">Estado</th></tr><tr>';
+  g.criterios.forEach(function(c){
+    c.acts.forEach(function(a){h+='<th>'+esc(a.nombre)+'<small>de '+a.max+'</small></th>'});
+    h+='<th>Prom.<small>sobre '+g.escala+'</small></th>';
+  });
+  h+='</tr></thead><tbody>';
+  var col;
+  g.alumnos.forEach(function(s,i){
+    var n=g.notas[s.id]||{},ra=r.al[s.id];col=0;
+    h+='<tr><td class="num">'+(i+1)+'</td><td class="name" title="'+esc(s.nombre)+'">'+esc(s.nombre)+'</td>';
+    g.criterios.forEach(function(c){
+      c.acts.forEach(function(a){
+        var v=n[a.id];
+        h+='<td><input class="g" type="text" inputmode="decimal" autocomplete="off" aria-label="'+esc(a.nombre)+' de '+esc(s.nombre)+'" data-s="'+s.id+'" data-a="'+a.id+'" data-max="'+a.max+'" data-r="'+i+'" data-c="'+col+'" value="'+(num(v)?v:"")+'"></td>';
+        col++;
+      });
+      h+='<td class="sub" data-k="c:'+s.id+':'+c.id+'">'+fmt(ra.crit[c.id],g)+'</td>';
+    });
+    h+='<td class="final'+(ra.final!=null&&ra.final<g.minima?" fail":"")+'" data-k="f:'+s.id+'">'+fmt(ra.final,g)+'</td><td data-k="s:'+s.id+'">'+pill(ra.final,g)+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td></td><td class="name">Promedio del grupo</td>';
+  g.criterios.forEach(function(c){
+    c.acts.forEach(function(a){h+='<td data-k="fa:'+a.id+'">'+fmt(r.act[a.id],g)+'</td>'});
+    h+='<td data-k="fc:'+c.id+'">'+fmt(r.crit[c.id],g)+'</td>';
+  });
+  h+='<td data-k="ff">'+fmt(r.promFinal,g)+'</td><td></td></tr></tfoot></table></div>';
+  h+='<div class="note">Cómo se calcula: en cada criterio se suman los puntos obtenidos y se dividen entre los puntos posibles; ese resultado se multiplica por el porcentaje del criterio y la suma de todos da la calificación final sobre '+g.escala+'. '+(g.vaciasCero?"Las celdas vacías cuentan como 0.":"Las celdas vacías no se toman en cuenta.")+'</div>';
+  $("view").innerHTML='<div style="display:flex;flex-direction:column;gap:12px">'+h+'</div>';
+}
+function actualizarCalculos(){
+  var g=G(),r=calcular(g);
+  var cells=$("view").querySelectorAll("[data-k]");
+  for(var i=0;i<cells.length;i++){
+    var el=cells[i],k=el.getAttribute("data-k").split(":");
+    if(k[0]==="c")el.textContent=fmt(r.al[k[1]].crit[k[2]],g);
+    else if(k[0]==="f"){var f=r.al[k[1]].final;el.textContent=fmt(f,g);el.classList.toggle("fail",f!=null&&f<g.minima)}
+    else if(k[0]==="s")el.innerHTML=pill(r.al[k[1]].final,g);
+    else if(k[0]==="fa")el.textContent=fmt(r.act[k[1]],g);
+    else if(k[0]==="fc")el.textContent=fmt(r.crit[k[1]],g);
+    else if(k[0]==="ff")el.textContent=fmt(r.promFinal,g);
+  }
+  renderFichas(r);
+}
+function renderAlumnos(){
+  var g=G(),h='<div class="two"><div class="panel"><h2>Agregar alumnos</h2><div class="note">Pega o escribe la lista, un alumno por renglón. Si viene numerada, los números se quitan solos.</div>'+
+    '<textarea id="txtLista" placeholder="Pérez López Ana&#10;Ramírez Soto Luis&#10;…"></textarea><div class="row"><button type="button" class="primary" id="btnAgregarLista">Agregar a la lista</button></div></div>'+
+    '<div class="panel"><div class="row between"><h2>Lista del grupo ('+g.alumnos.length+')</h2><button type="button" id="btnOrdenar">Ordenar A–Z</button></div><div class="list">';
+  if(!g.alumnos.length)h+='<div class="note">Aún no hay alumnos.</div>';
+  g.alumnos.forEach(function(s,i){
+    h+='<div class="item"><span class="n">'+(i+1)+'</span><input type="text" id="al-'+s.id+'" data-alumno="'+s.id+'" value="'+esc(s.nombre)+'" aria-label="Nombre del alumno '+(i+1)+'"><button type="button" class="icon danger" data-delal="'+s.id+'" title="Eliminar alumno">✕</button></div>';
+  });
+  h+='</div></div></div>';
+  $("view").innerHTML=h;
+}
+function barraPeso(g){
+  var pt=pesoTotal(g),off=Math.abs(pt-100)>0.001;
+  return '<div class="row between"><span>Total de porcentajes: <b class="'+(off?"fail":"")+'">'+pt+'%</b>'+(off?" · deben sumar 100%":" · correcto")+'</span></div><div class="bar'+(off?" off":"")+'"><i style="width:'+Math.max(0,Math.min(100,pt))+'%"></i></div>';
+}
+function renderCriterios(){
+  var g=G(),h='<div class="panel"><h2>Criterios de evaluación</h2><div class="note">Cada criterio vale un porcentaje de la calificación y puede tener varias actividades (tareas, exámenes, prácticas). “Vale” es la calificación máxima de cada actividad.</div><div id="pesoBox">'+barraPeso(g)+'</div>';
+  g.criterios.forEach(function(c){
+    h+='<div class="crit"><div class="head"><input type="text" id="cn-'+c.id+'" data-critn="'+c.id+'" value="'+esc(c.nombre)+'" aria-label="Nombre del criterio"><span class="w"><input type="number" id="cp-'+c.id+'" min="0" max="100" step="1" data-critp="'+c.id+'" value="'+(Number(c.peso)||0)+'" aria-label="Porcentaje de '+esc(c.nombre)+'">%</span><button type="button" class="danger" data-delcrit="'+c.id+'">Eliminar criterio</button></div><div class="acts">';
+    if(!c.acts.length)h+='<div class="note">Sin actividades. Agrega al menos una para poder calificar.</div>';
+    c.acts.forEach(function(a){
+      h+='<div class="item"><input type="text" id="an-'+a.id+'" data-actn="'+a.id+'" value="'+esc(a.nombre)+'" aria-label="Nombre de la actividad"><span class="note">vale</span><input type="number" id="am-'+a.id+'" min="1" step="1" data-actm="'+a.id+'" value="'+a.max+'" aria-label="Calificación máxima de '+esc(a.nombre)+'"><button type="button" class="icon danger" data-delact="'+a.id+'" title="Eliminar actividad">✕</button></div>';
+    });
+    h+='<div><button type="button" data-addact="'+c.id+'">+ Agregar actividad</button></div></div></div>';
+  });
+  h+='<div><button type="button" class="primary" id="btnAddCrit">+ Agregar criterio</button></div></div>';
+  h+='<div class="panel" style="margin-top:16px"><h2>Ajustes del grupo</h2><div class="settings">'+
+    '<label for="setNombre">Nombre del grupo o materia<input type="text" id="setNombre" value="'+esc(g.nombre)+'"></label>'+
+    '<label for="setEscala">Escala de la calificación final<select id="setEscala"><option value="10"'+(g.escala==10?" selected":"")+'>0 a 10</option><option value="100"'+(g.escala==100?" selected":"")+'>0 a 100</option></select></label>'+
+    '<label for="setMinima">Mínima aprobatoria<input type="number" id="setMinima" min="0" step="0.1" value="'+g.minima+'"></label>'+
+    '<label for="setDec">Redondeo de la final<select id="setDec"><option value="0"'+(g.decimales==0?" selected":"")+'>Entero (8)</option><option value="1"'+(g.decimales==1?" selected":"")+'>Un decimal (8.3)</option><option value="2"'+(g.decimales==2?" selected":"")+'>Dos decimales (8.25)</option></select></label>'+
+    '<label for="setVacias">Celdas vacías<select id="setVacias"><option value="1"'+(g.vaciasCero?" selected":"")+'>Cuentan como 0</option><option value="0"'+(!g.vaciasCero?" selected":"")+'>No se toman en cuenta</option></select></label>'+
+    '</div><div><button type="button" class="danger" id="btnDelGrupo">Eliminar este grupo</button></div></div>';
+  $("view").innerHTML=h;
+}
+function renderVista(){if(tab==="notas")renderNotas();else if(tab==="alumnos")renderAlumnos();else renderCriterios()}
+function renderTodo(){renderCabecera();renderFichas();renderVista()}
+
+/* ---------- Acciones ---------- */
+function buscarCrit(g,id){return g.criterios.filter(function(c){return c.id===id})[0]}
+function buscarAct(g,id){var r=null;g.criterios.forEach(function(c){c.acts.forEach(function(a){if(a.id===id)r={c:c,a:a}})});return r}
+function leerNota(inp){
+  var g=G(),s=inp.getAttribute("data-s"),a=inp.getAttribute("data-a"),max=Number(inp.getAttribute("data-max"));
+  var t=inp.value.trim().replace(",",".");
+  if(!g.notas[s])g.notas[s]={};
+  if(t===""){delete g.notas[s][a];inp.classList.remove("bad");inp.title="";return}
+  var v=Number(t);
+  if(!isFinite(v)||v<0||v>max){delete g.notas[s][a];inp.classList.add("bad");inp.title="Escribe un número entre 0 y "+max;return}
+  g.notas[s][a]=v;inp.classList.remove("bad");inp.title="";
+}
+function tablaTexto(sep,q){
+  var g=G(),r=calcular(g),rows=[],head=["No.","Alumno"];
+  var cel=function(v){v=String(v==null?"":v);return q?'"'+v.replace(/"/g,'""')+'"':v.replace(/[\t\n]/g," ")};
+  g.criterios.forEach(function(c){
+    c.acts.forEach(function(a){head.push(c.nombre+" - "+a.nombre+" (de "+a.max+")")});
+    head.push(c.nombre+" ("+(Number(c.peso)||0)+"%)");
+  });
+  head.push("Final","Estado");rows.push(head.map(cel).join(sep));
+  g.alumnos.forEach(function(s,i){
+    var n=g.notas[s.id]||{},ra=r.al[s.id],row=[i+1,s.nombre];
+    g.criterios.forEach(function(c){
+      c.acts.forEach(function(a){row.push(num(n[a.id])?n[a.id]:"")});
+      row.push(ra.crit[c.id]==null?"":fmt(ra.crit[c.id],g));
+    });
+    row.push(ra.final==null?"":fmt(ra.final,g),ra.final==null?"Sin calificar":(ra.final>=g.minima?"Aprobado":"Reprobado"));
+    rows.push(row.map(cel).join(sep));
+  });
+  var pie=["","Promedio del grupo"];
+  g.criterios.forEach(function(c){c.acts.forEach(function(a){pie.push(r.act[a.id]==null?"":fmt(r.act[a.id],g))});pie.push(r.crit[c.id]==null?"":fmt(r.crit[c.id],g))});
+  pie.push(r.promFinal==null?"":fmt(r.promFinal,g),"");rows.push(pie.map(cel).join(sep));
+  return rows.join("\n");
+}
+
+document.addEventListener("click",function(e){
+  var t=e.target.closest("button");if(!t)return;
+  var g=G(),v;
+  if(t.hasAttribute("data-tab")){tab=t.getAttribute("data-tab");renderTodo();return}
+  if(t.hasAttribute("data-go")){tab=t.getAttribute("data-go");renderTodo();return}
+  if(t.id==="btnNuevoGrupo"){var n=grupoNuevo("Grupo "+(state.grupos.length+1));state.grupos.push(n);state.activo=n.id;tab="criterios";cambio();renderTodo();var i=$("setNombre");if(i){i.focus();i.select()}return}
+  if(t.id==="btnEmpezar"){var nuevo=grupoNuevo("Mi grupo");state.grupos=state.grupos.filter(function(x){return !x.ejemplo});state.grupos.push(nuevo);state.activo=nuevo.id;tab="alumnos";cambio();renderTodo();return}
+  if(t.id==="btnAgregarLista"){
+    var lines=$("txtLista").value.split(/\r?\n/).map(function(l){return l.replace(/^\s*\d+\s*[.)\-:\t]?\s*/,"").replace(/\s+/g," ").trim()}).filter(Boolean);
+    if(!lines.length){toast("Escribe al menos un nombre");return}
+    lines.forEach(function(l){g.alumnos.push({id:uid(),nombre:l})});
+    cambio();renderTodo();toast(lines.length+(lines.length===1?" alumno agregado":" alumnos agregados"));return;
+  }
+  if(t.id==="btnOrdenar"){g.alumnos.sort(function(a,b){return a.nombre.localeCompare(b.nombre,"es",{sensitivity:"base"})});cambio();renderTodo();return}
+  if((v=t.getAttribute("data-delal"))){
+    var al=g.alumnos.filter(function(s){return s.id===v})[0];
+    confirmar("¿Eliminar a "+(al?al.nombre:"este alumno")+" y sus calificaciones?",function(){g.alumnos=g.alumnos.filter(function(s){return s.id!==v});delete g.notas[v];cambio();renderTodo()});return;
+  }
+  if(t.id==="btnAddCrit"){g.criterios.push({id:uid(),nombre:"Criterio nuevo",peso:0,acts:[{id:uid(),nombre:"Actividad 1",max:10}]});cambio();renderTodo();return}
+  if((v=t.getAttribute("data-addact"))){var c=buscarCrit(g,v);if(c){c.acts.push({id:uid(),nombre:(c.acts.length?c.nombre+" "+(c.acts.length+1):c.nombre),max:c.acts.length?c.acts[c.acts.length-1].max:10});cambio();renderTodo()}return}
+  if((v=t.getAttribute("data-delcrit"))){
+    var cc=buscarCrit(g,v);
+    confirmar("¿Eliminar el criterio “"+(cc?cc.nombre:"")+"” con todas sus calificaciones?",function(){g.criterios=g.criterios.filter(function(x){return x.id!==v});cambio();renderTodo()});return;
+  }
+  if((v=t.getAttribute("data-delact"))){
+    var ba=buscarAct(g,v);if(!ba)return;
+    confirmar("¿Eliminar la actividad “"+ba.a.nombre+"” y sus calificaciones?",function(){ba.c.acts=ba.c.acts.filter(function(x){return x.id!==v});Object.keys(g.notas).forEach(function(s){delete g.notas[s][v]});cambio();renderTodo()});return;
+  }
+  if(t.id==="btnDelGrupo"){
+    confirmar("¿Eliminar el grupo “"+g.nombre+"” con sus alumnos y calificaciones?",function(){
+      state.grupos=state.grupos.filter(function(x){return x.id!==g.id});
+      if(!state.grupos.length)state.grupos.push(grupoNuevo("Mi grupo"));
+      state.activo=state.grupos[0].id;tab="notas";cambio();renderTodo();
+    });return;
+  }
+  if(t.id==="btnCopiar"){
+    var txt=tablaTexto("\t",false);
+    try{navigator.clipboard.writeText(txt).then(function(){toast("Tabla copiada. Pégala en Excel o Google Sheets")},function(){toast("No se pudo copiar la tabla")})}catch(err){toast("No se pudo copiar la tabla")}
+    return;
+  }
+  if(t.id==="btnCsv"&&descargas){
+    var nombre=(g.nombre||"grupo").replace(/[^\wáéíóúñÁÉÍÓÚÑ\- ]+/g,"").trim().replace(/\s+/g,"-")||"grupo";
+    descargas.save({filename:"calificaciones-"+nombre+".csv",data:"﻿"+tablaTexto(",",true)}).then(function(){toast("Archivo guardado")}).catch(function(err){if(!err||err.code!=="declined")toast("No se pudo descargar. Usa “Copiar tabla”")});
+    return;
+  }
+});
+document.addEventListener("input",function(e){
+  var t=e.target,g=G(),v;
+  if(t.classList&&t.classList.contains("g")){leerNota(t);cambio();actualizarCalculos();return}
+  if((v=t.getAttribute("data-alumno"))){var s=g.alumnos.filter(function(x){return x.id===v})[0];if(s){s.nombre=t.value;cambio()}return}
+  if((v=t.getAttribute("data-critn"))){var c=buscarCrit(g,v);if(c){c.nombre=t.value;cambio()}return}
+  if((v=t.getAttribute("data-critp"))){var c2=buscarCrit(g,v);if(c2){var p=Number(t.value);c2.peso=isFinite(p)&&p>=0?p:0;cambio();$("pesoBox").innerHTML=barraPeso(g);renderFichas()}return}
+  if((v=t.getAttribute("data-actn"))){var b=buscarAct(g,v);if(b){b.a.nombre=t.value;cambio()}return}
+  if((v=t.getAttribute("data-actm"))){var b2=buscarAct(g,v);if(b2){var m=Number(t.value);if(isFinite(m)&&m>0){b2.a.max=m;cambio();renderFichas()}}return}
+  if(t.id==="setNombre"){g.nombre=t.value||"Grupo";cambio();renderCabecera();return}
+  if(t.id==="setMinima"){var mi=Number(t.value);if(isFinite(mi)&&mi>=0){g.minima=mi;cambio();renderFichas()}return}
+});
+document.addEventListener("change",function(e){
+  var t=e.target,g=G();
+  if(t.id==="grupoSel"){state.activo=t.value;tab="notas";cambio();renderTodo();return}
+  if(t.id==="setEscala"){
+    var ant=g.escala;g.escala=Number(t.value);
+    if(ant!==g.escala){g.minima=redondear(g.minima/ant*g.escala,1)}
+    cambio();renderTodo();return;
+  }
+  if(t.id==="setDec"){g.decimales=Number(t.value);cambio();renderFichas();return}
+  if(t.id==="setVacias"){g.vaciasCero=t.value==="1";cambio();renderFichas();return}
+});
+function celda(r,c){return $("view").querySelector('input.g[data-r="'+r+'"][data-c="'+c+'"]')}
+document.addEventListener("keydown",function(e){
+  var t=e.target;if(!t.classList||!t.classList.contains("g"))return;
+  var r=Number(t.getAttribute("data-r")),c=Number(t.getAttribute("data-c")),d=null;
+  if(e.key==="Enter"||e.key==="ArrowDown")d=celda(r+1,c);
+  else if(e.key==="ArrowUp")d=celda(r-1,c);
+  else return;
+  e.preventDefault();if(d){d.focus();d.select()}
+});
+document.addEventListener("paste",function(e){
+  var t=e.target;if(!t.classList||!t.classList.contains("g"))return;
+  var txt=(e.clipboardData||window.clipboardData).getData("text");
+  if(!txt||!/[\t\n]/.test(txt.replace(/\s+$/,"")))return;
+  e.preventDefault();
+  var r0=Number(t.getAttribute("data-r")),c0=Number(t.getAttribute("data-c"));
+  txt.replace(/\s+$/,"").split(/\r?\n/).forEach(function(line,i){
+    line.split("\t").forEach(function(val,j){var d=celda(r0+i,c0+j);if(d){d.value=val.trim();leerNota(d)}});
+  });
+  cambio();actualizarCalculos();
+});
+
+renderTodo();
+setSync("","Guardado en este navegador");
+iniciarNube(0);
+})();
+</script>
+</body>
+</html>
